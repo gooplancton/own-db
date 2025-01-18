@@ -1,0 +1,10 @@
+[package]
+name = "own-db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+byteorder = "1.5.0"
+rand = "0.8.5"
+sha1 = "0.10.6"
+
