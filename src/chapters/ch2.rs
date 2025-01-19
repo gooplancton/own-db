@@ -1,11 +1,12 @@
+#![allow(dead_code)]
+#![allow(clippy::items_after_test_module)]
+
 // Section 2.1: Types of queries
 // Three main types of queries:
 //  - point query: look up a specific record using a unique key
 //  - scan query: scan the whole index for records matching a condition
 //  - range query: find a starting point in a sorted index and iterate
 //
-
-use std::mem;
 
 use byteorder::{BigEndian, ReadBytesExt};
 use sha1::{Digest, Sha1};
@@ -160,3 +161,102 @@ mod hashtable_tests {
         assert_eq!(val, Some("c"));
     }
 }
+
+// Section 2.3: sorted arrays
+// The simplest ordered data structure is the sorted array.
+// - find an element in O(log n) time
+// - update or insert an element in O(n) time, kinda expensive
+//
+
+#[derive(PartialEq, PartialOrd, Ord, Eq, Debug)]
+struct SortedArrayEntry {
+    key: String,
+    value: String,
+}
+
+#[derive(Default, Debug)]
+struct SortedArray {
+    inner: Vec<SortedArrayEntry>,
+}
+
+impl SortedArray {
+    fn find_key(&self, key: &str) -> Option<usize> {
+        let mut left = 0;
+        let mut right = self.inner.len();
+
+        while left < right {
+            let middle = (left + right) / 2;
+            let entry = self.inner.get(middle).unwrap();
+            match &str::cmp(&entry.key, key) {
+                std::cmp::Ordering::Equal => return Some(middle),
+                std::cmp::Ordering::Less => left = middle,
+                std::cmp::Ordering::Greater => right = middle,
+            }
+        }
+
+        None
+    }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        let idx = self.find_key(key);
+        idx.map(|idx| self.inner[idx].value.as_str())
+    }
+
+    pub fn get_range(&self, key_from: &str, key_to: &str) -> Vec<&str> {
+        let mut results = vec![];
+        let idx = self.find_key(key_from);
+        if idx.is_none() || key_from > key_to {
+            return results;
+        }
+
+        let idx = idx.unwrap();
+        while let Some(entry) = self.inner.get(idx) {
+            if entry.key.as_str() <= key_to {
+                results.push(entry.value.as_str());
+            }
+        }
+
+        results
+    }
+
+    pub fn delete(&mut self, key: &str) -> Option<String> {
+        let idx = self.find_key(key);
+        idx.map(|idx| self.inner.remove(idx).value)
+    }
+
+    pub fn insert(&mut self, key: &str, value: &str) {
+        let mut left = 0;
+        let mut right = self.inner.len();
+        let mut middle = (left + right) / 2;
+
+        let new_entry = SortedArrayEntry {
+            key: key.to_owned(),
+            value: value.to_owned(),
+        };
+
+        while left < right {
+            middle = (left + right) / 2;
+            let entry = self.inner.get(middle).unwrap();
+            match &str::cmp(&entry.key, key) {
+                std::cmp::Ordering::Equal => {
+                    self.inner[middle] = new_entry;
+                    return;
+                }
+                std::cmp::Ordering::Less => left = middle,
+                std::cmp::Ordering::Greater => right = middle,
+            }
+        }
+
+        self.inner.insert(middle, new_entry); // This takes O(n) time
+    }
+}
+
+// There are some optimizations we can apply to reduce the performance
+// hit of inserting a new element.
+// - Keep a list of smaller sorted arrays instead of a single large one
+//  (this can be compared to having a B+Tree of height one)
+// - Buffer all updates in a smaller array and then merge it once the smaller
+//  array reaches a certain size (this can be done at multiple levels and eventually
+//  leads to LSM-Trees)
+//
+
